@@ -21,6 +21,9 @@ class LeNet(nn.Module):
             act(),
             nn.Conv2d(12, 12, kernel_size=5, padding=5//2, stride=2),
             act(),
+            #change
+            # nn.Conv2d(12, 12, kernel_size=5, padding=5//2, stride=1),
+            # act(),
             nn.Conv2d(12, 12, kernel_size=5, padding=5//2, stride=1),
             act(),
         )
