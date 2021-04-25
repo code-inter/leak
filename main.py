@@ -32,7 +32,8 @@ if torch.cuda.is_available():
     device = "cuda"
 print("Running on %s" % device)
 
-
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
 
 dst = datasets.CIFAR100("/data/b/yang/pruning_criteria/data/cifar.python", download=True)
 # change
@@ -59,9 +60,12 @@ gt_label = gt_label.view(1, )
 gt_onehot_label = label_to_onehot(gt_label, num_classes=100)
 
 # plt.imshow(tt(gt_data[0].cpu()))
-fig_gt=tt(gt_data[0].cpu())
 path="/data/b/yang/leak/dlg/savefig/"
-fig_gt.save(path+ "fig_gt_index_"+ str(args.index)+'.png')
+path=path+"index_"+ str(args.index)+"/"
+os.makedirs(path, exist_ok=True)
+
+fig_gt=tt(gt_data[0].cpu())
+fig_gt.save(path+ "fig_gt"+'.png')
 print("GT label is %d." % gt_label.item(), "\nOnehot label is %d." % torch.argmax(gt_onehot_label, dim=-1).item())
 
 
@@ -71,60 +75,76 @@ net = LeNet().to(device)
 
 # torch.manual_seed(1234678)
 # torch.manual_seed(1234)
-seed=50
-torch.manual_seed(seed)
+# seed=50
+for seed in range(10,110,10):
+    torch.manual_seed(seed)
 
-net.apply(weights_init)
-criterion = cross_entropy_for_onehot
+    net.apply(weights_init)
+    criterion = cross_entropy_for_onehot
 
-# compute original gradient 
-pred = net(gt_data)
-y = criterion(pred, gt_onehot_label)
-dy_dx = torch.autograd.grad(y, net.parameters())
+    # compute original gradient
+    pred = net(gt_data)
+    y = criterion(pred, gt_onehot_label)
+    dy_dx = torch.autograd.grad(y, net.parameters())
 
-original_dy_dx = list((_.detach().clone() for _ in dy_dx))
+    original_dy_dx = list((_.detach().clone() for _ in dy_dx))
 
-# generate dummy data and label
-dummy_data = torch.randn(gt_data.size()).to(device).requires_grad_(True)
-dummy_label = torch.randn(gt_onehot_label.size()).to(device).requires_grad_(True)
+    # generate dummy data and label
+    dummy_data = torch.randn(gt_data.size()).to(device).requires_grad_(True)
+    dummy_label = torch.randn(gt_onehot_label.size()).to(device).requires_grad_(True)
 
-# plt.imshow(tt(dummy_data[0].cpu()))
-fig_dummy=tt(dummy_data[0].cpu())
-fig_dummy.save(path+'fig_dummy_index_' + args.index +'.png')
+    # plt.imshow(tt(dummy_data[0].cpu()))
+    fig_dummy=tt(dummy_data[0].cpu())
+    fig_dummy.save(path+'fig_dummy_seed_' + str(seed) +'.png')
 
-optimizer = torch.optim.LBFGS([dummy_data, dummy_label])
-
-
-history = []
-for iters in range(300):
-    def closure():
-        optimizer.zero_grad()
-
-        dummy_pred = net(dummy_data) 
-        dummy_onehot_label = F.softmax(dummy_label, dim=-1)
-        dummy_loss = criterion(dummy_pred, dummy_onehot_label) 
-        dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
-        
-        grad_diff = 0
-        for gx, gy in zip(dummy_dy_dx, original_dy_dx): 
-            grad_diff += ((gx - gy) ** 2).sum()
-        grad_diff.backward()
-        
-        return grad_diff
-    
-    optimizer.step(closure)
-    if iters % 10 == 0: 
-        current_loss = closure()
-        print(iters, "%.4f" % current_loss.item())
-        history.append(tt(dummy_data[0].cpu()))
+    optimizer = torch.optim.LBFGS([dummy_data, dummy_label])
 
 
-# fig, ax = plt.subplots(figsize=(6, 4))
-plt.figure(figsize=(12, 8))
-for i in range(30):
-    plt.subplot(3, 10, i + 1)
-    plt.imshow(history[i])
-    plt.title("iter=%d" % (i * 10))
-    plt.axis('off')
+    history = []
+    loss_history = []
+    for iters in range(300):
+        def closure():
+            optimizer.zero_grad()
 
-plt.savefig(path+"process_" + "index_" + str(args.index) +"seed_"+ str(seed)+ ".png")
+            dummy_pred = net(dummy_data)
+            dummy_onehot_label = F.softmax(dummy_label, dim=-1)
+            dummy_loss = criterion(dummy_pred, dummy_onehot_label)
+            dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
+
+            grad_diff = 0
+            for gx, gy in zip(dummy_dy_dx, original_dy_dx):
+                grad_diff += ((gx - gy) ** 2).sum()
+            grad_diff.backward()
+
+            return grad_diff
+
+        optimizer.step(closure)
+        if iters % 10 == 0:
+            current_loss = closure()
+            print(iters, "%.4f" % current_loss.item())
+            history.append(tt(dummy_data[0].cpu()))
+            loss_history.append(current_loss.item())
+
+
+    # fig, ax = plt.subplots(figsize=(6, 4))
+    plt.figure(figsize=(12, 8))
+    for i in range(30):
+        plt.subplot(3, 10, i + 1)
+        plt.imshow(history[i])
+        plt.title("iter=%d" % (i * 10))
+        # plt.figtext( 0, -1,)
+        plt.annotate("loss="+"%.4f" % loss_history[i], (0, 0), (0, 40))
+        plt.axis('off')
+
+    iter_loss_00001=[n for n, i in enumerate(loss_history) if i < 0.0001]
+    #
+    # import pdb
+    # pdb.set_trace()
+    if isinstance(iter_loss_00001,list) and len(iter_loss_00001)>0:
+        iter_loss_00001_id=iter_loss_00001[0]*10
+    else:
+        iter_loss_00001_id = "None"
+
+    plt.suptitle('Image: {}, Seed: {}, the iteration for loss < 0.001 is: {}'.format(args.index, seed, iter_loss_00001_id))
+
+    plt.savefig(path+"process_" +"seed_"+ str(seed)+ ".png")
