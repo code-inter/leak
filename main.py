@@ -25,6 +25,9 @@ parser.add_argument('--index', type=int, default="25",
                     help='the index for leaking images on CIFAR.')
 parser.add_argument('--image', type=str,default="",
                     help='the path to customized image.')
+parser.add_argument('--nets', type=str,default="lenet",
+                    help='the net for classification')
+
 args = parser.parse_args()
 
 device = "cpu"
@@ -59,8 +62,18 @@ gt_label = torch.Tensor([dst[img_index][1]]).long().to(device)
 gt_label = gt_label.view(1, )
 gt_onehot_label = label_to_onehot(gt_label, num_classes=100)
 
+from models.vision import LeNet, weights_init, ResNet18
+
+if args.nets== "lenet":
+    net = LeNet().to(device)
+    path = "/data/b/yang/leak/dlg/savefig/"
+elif args.nets== "resnet18":
+    net = ResNet18().to(device)
+    path = "/data/b/yang/leak/dlg/savefig/resnet18_"
+print("net is {}".format(args.nets))
+
 # plt.imshow(tt(gt_data[0].cpu()))
-path="/data/b/yang/leak/dlg/savefig/"
+
 path=path+"index_"+ str(args.index)+"/"
 os.makedirs(path, exist_ok=True)
 
@@ -69,17 +82,16 @@ fig_gt.save(path+ "fig_gt"+'.png')
 print("GT label is %d." % gt_label.item(), "\nOnehot label is %d." % torch.argmax(gt_onehot_label, dim=-1).item())
 
 
-from models.vision import LeNet, weights_init
-net = LeNet().to(device)
-
-
 # torch.manual_seed(1234678)
 # torch.manual_seed(1234)
 # seed=50
 for seed in range(10,110,10):
     torch.manual_seed(seed)
 
-    net.apply(weights_init)
+    # only apply weight init for lenet here, resnet has init before
+    if args.nets== "lenet":
+        net.apply(weights_init)
+
     criterion = cross_entropy_for_onehot
 
     # compute original gradient
@@ -137,7 +149,6 @@ for seed in range(10,110,10):
         plt.axis('off')
 
     iter_loss_00001=[n for n, i in enumerate(loss_history) if i < 0.0001]
-    #
     # import pdb
     # pdb.set_trace()
     if isinstance(iter_loss_00001,list) and len(iter_loss_00001)>0:
@@ -146,5 +157,4 @@ for seed in range(10,110,10):
         iter_loss_00001_id = "None"
 
     plt.suptitle('Image: {}, Seed: {}, the iteration for loss < 0.001 is: {}'.format(args.index, seed, iter_loss_00001_id))
-
     plt.savefig(path+"process_" +"seed_"+ str(seed)+ ".png")
