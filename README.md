@@ -18,12 +18,15 @@ To run the code, following libraies are required
 # Single image on CIFAR
 python main.py --index 25
 
+# Single image on CIFAR, change the network to resnet56
+python main.py --index 25 --nets resnet56
+
+
 # Effect on different seeds
 sh scripts/run_seeds.sh
 
 # Effect on different nets
 sh scripts/run_nets.sh
-
 ```
 
 ## Results on different seeds
