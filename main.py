@@ -62,14 +62,14 @@ gt_label = torch.Tensor([dst[img_index][1]]).long().to(device)
 gt_label = gt_label.view(1, )
 gt_onehot_label = label_to_onehot(gt_label, num_classes=100)
 
-from models.vision import LeNet, weights_init, ResNet18
+from models.vision import LeNet, weights_init, resnet56
 
 if args.nets== "lenet":
     net = LeNet().to(device)
     path = "/data/b/yang/leak/dlg/savefig/"
-elif args.nets== "resnet18":
-    net = ResNet18().to(device)
-    path = "/data/b/yang/leak/dlg/savefig/resnet18_"
+elif args.nets== "resnet56":
+    net = resnet56().to(device)
+    path = "/data/b/yang/leak/dlg/savefig/resnet56_"
 print("net is {}".format(args.nets))
 
 # plt.imshow(tt(gt_data[0].cpu()))
@@ -85,7 +85,7 @@ print("GT label is %d." % gt_label.item(), "\nOnehot label is %d." % torch.argma
 # torch.manual_seed(1234678)
 # torch.manual_seed(1234)
 # seed=50
-for seed in range(10,110,10):
+for seed in range(50,60,10):
     torch.manual_seed(seed)
 
     # only apply weight init for lenet here, resnet has init before
@@ -93,6 +93,9 @@ for seed in range(10,110,10):
         net.apply(weights_init)
 
     criterion = cross_entropy_for_onehot
+    #
+    # import pdb
+    # pdb.set_trace()
 
     # compute original gradient
     pred = net(gt_data)
@@ -110,22 +113,30 @@ for seed in range(10,110,10):
     fig_dummy.save(path+'fig_dummy_seed_' + str(seed) +'.png')
 
     optimizer = torch.optim.LBFGS([dummy_data, dummy_label])
+    # optimizer = torch.optim.RMSprop([dummy_data, dummy_label],lr=0.1)
 
-
+    import pdb
+    pdb.set_trace()
     history = []
     loss_history = []
     for iters in range(300):
+        # print("iter is {}".format(iters))
         def closure():
             optimizer.zero_grad()
 
             dummy_pred = net(dummy_data)
+            # print(dummy_pred)
             dummy_onehot_label = F.softmax(dummy_label, dim=-1)
             dummy_loss = criterion(dummy_pred, dummy_onehot_label)
+            # print(dummy_loss)
             dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
 
             grad_diff = 0
             for gx, gy in zip(dummy_dy_dx, original_dy_dx):
+
+                print("gx={} gy={}".format(gx,gy))
                 grad_diff += ((gx - gy) ** 2).sum()
+            pdb.set_trace()
             grad_diff.backward()
 
             return grad_diff
@@ -149,8 +160,7 @@ for seed in range(10,110,10):
         plt.axis('off')
 
     iter_loss_00001=[n for n, i in enumerate(loss_history) if i < 0.0001]
-    # import pdb
-    # pdb.set_trace()
+
     if isinstance(iter_loss_00001,list) and len(iter_loss_00001)>0:
         iter_loss_00001_id=iter_loss_00001[0]*10
     else:
