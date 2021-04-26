@@ -18,9 +18,15 @@ To run the code, following libraies are required
 # Single image on CIFAR
 python main.py --index 25
 
-# Deep Leakage on your own Image
-python main.py --image yours.jpg
+# Effect on different seeds
+sh scripts/run_seeds.sh
+
+# Effect on different nets
+sh scripts/run_nets.sh
+
 ```
+
+## Results on different seeds
 
 <p align="center">
     <img src="assets/20.gif" width="80%" />
